@@ -34,9 +34,9 @@ tags:
 - ✉️ Draft appropriate customer replies
 - 🎯 Make correct business decisions (refunds, escalations, priorities)
 
-### Key Features
+### ✨ Key Features
 
-✅ **Real-World Complexity** — Not games or toy tasks; genuine support scenarios  
+✅ **Real-World Complexity** — Not games; genuine support scenarios  
 ✅ **Deterministic Grading** — Reproducible, verifiable scoring  
 ✅ **Shaped Rewards** — Progress incentives over full trajectories  
 ✅ **Multi-Difficulty** — Easy → Medium → Hard with scaled time budgets  
@@ -61,13 +61,14 @@ pip install -e .
 
 ```bash
 python -m support_queue_env.server.app
-# API docs: http://localhost:8000/docs
+# API docs at: http://localhost:8000/docs
 ```
 
-### Try a Task
+### Try Your First Task
 
 ```python
 from support_queue_env.server.support_queue_environment import SupportQueueEnvironment
+from support_queue_env.models import SupportQueueAction
 
 env = SupportQueueEnvironment()
 
@@ -80,138 +81,197 @@ print(f"Customer Message: {obs.customer_message}")
 action = SupportQueueAction(queue="account_access", priority="high", submit=True)
 obs = env.step(action)
 print(f"Reward: {obs.reward}")
-print(f"Score: {obs.score_breakdown['overall']}")
+print(f"Final Score: {obs.score_breakdown['overall']}")
 ```
 
 ---
 
-## 📚 Tasks
+## 📚 Task Descriptions
 
-Each task tests different aspects of support triage:
+Each task tests different aspects of customer support reasoning:
 
-| Task | Difficulty | Time Budget | Focus | Grading |
-|------|-----------|-------------|-------|---------|
-| **easy_password_reset** | ⭐ Easy | 4 steps | Quick decisions, account security | Queue, Priority, Status |
-| **medium_duplicate_charge** | ⭐⭐ Medium | 6 steps | Refund logic, financial accuracy | Refund decision, amount precision |
-| **hard_admin_compromise** | ⭐⭐⭐ Hard | 8 steps | Security reasoning, escalation | Escalation team, security tags |
+| Task | Difficulty | Time Budget | Focus Area | Key Metrics |
+|------|-----------|-------------|-----------|------------|
+| **easy_password_reset** | ⭐ Easy | 4 steps | Quick account access resolution | Queue accuracy, priority setting |
+| **medium_duplicate_charge** | ⭐⭐ Medium | 6 steps | Financial decision-making | Refund correctness, amount precision |
+| **hard_admin_compromise** | ⭐⭐⭐ Hard | 8 steps | Security incident triage | Escalation routing, tag coverage |
 
-All tasks scored **0.0 to 1.0** with component breakdowns.
+**All tasks** are graded on a **0.0–1.0 scale** with detailed component breakdowns.
 
 ---
 
 ## 🎮 API Reference
 
-### Environment Methods
+### Core Methods
 
 #### `reset(seed, task_id, episode_id) → Observation`
-Initialize an episode. Returns initial observation with task context.
+
+Initialize an episode with optional task selection and seeding.
 
 ```python
+# Random task
+obs = env.reset()
+
+# Specific task with seed
 obs = env.reset(task_id="medium_duplicate_charge", seed=42)
-# obs.customer_message, obs.account_snapshot, obs.policy_snippets
+
+# With custom episode ID
+obs = env.reset(task_id="easy_password_reset", episode_id="exp-001")
 ```
 
+**Returns:** `SupportQueueObservation` containing:
+- Task metadata (`task_id`, `difficulty`, `title`, `objective`)
+- Work inputs (`customer_message`, `account_snapshot`, `policy_snippets`)
+- Initial `current_record` (empty `TicketRecord`)
+- Initial `score_breakdown`
+
+---
+
 #### `step(action) → Observation`
-Apply action and receive reward + new observation state.
+
+Execute an action and receive reward + updated observation.
 
 ```python
 action = SupportQueueAction(
     queue="billing",
     priority="normal",
+    escalation_team="billing_ops",
+    status="escalated",
     refund_decision="partial",
     refund_amount=25.50,
-    tags=["billing", "refund"],
-    reply_draft="We've approved a $25.50 refund...",
-    submit=True
+    tags=["billing", "refund", "verified"],
+    internal_notes="Customer has valid receipt. Approved partial refund.",
+    reply_draft="We've reviewed your account and approved a $25.50 refund.",
+    submit=True  # Finalize and grade
 )
+
 obs = env.step(action)
-# obs.reward, obs.done, obs.score_breakdown
+# obs.reward: float (shaped reward signal)
+# obs.done: bool (episode finished)
+# obs.score_breakdown: dict (detailed grading)
 ```
 
+**Returns:** `SupportQueueObservation` with:
+- Updated `current_record` (your changes applied)
+- New `score_breakdown` (after grading)
+- `reward` (scalar signal)
+- `done` (whether episode finished)
+- `feedback` (environment notes)
+
+---
+
 #### `state() → SupportQueueState`
-Access internal episode state (cumulative reward, final score, etc.).
+
+Access full internal episode state.
 
 ```python
 state = env.state
-print(state.cumulative_reward, state.final_score)
+print(state.cumulative_reward)  # Sum of all rewards
+print(state.final_score)        # Graded score
+print(state.submitted)          # Episode finalized?
+print(state.current_record)     # Current ticket state
 ```
 
 ---
 
-## 💰 Reward Function
+## 💰 Reward Shaping
 
-Agents learn through shaped rewards:
+Agents learn through a carefully designed reward function:
 
 ```
-reward = (score_improvement) × 1.5    # Progress bonus
-       - 0.02                           # Step cost
-       - 0.05 * (no_op)                # Inaction penalty
-       - 0.05 * (unexpected_refund)    # Safety penalty
-       + (final_score - 0.05) * submit # Submission bonus
+reward = (current_score - previous_score) × 1.5    # Score improvement bonus
+       - 0.02                                        # Step cost (discourage bloat)
+       - 0.05 * [no_op]                            # No-op penalty (encourage action)
+       - 0.05 * [unexpected_refund]                # Safety penalty
+       + (final_score - 0.05) * [submit]           # Submission bonus (scaled by quality)
+       - 0.05 * [auto_submit]                      # Budget exceeded penalty
 ```
 
-**Result:** Agents learn to make *informed* decisions quickly, avoiding:
-- Excessive deliberation (step cost)
-- Unwarranted refunds (safety penalty)
-- Repeated inaction (no-op penalty)
+**Design Principles:**
+- ✅ Agents learn to improve incrementally
+- ✅ Discourage time-wasting (step cost)
+- ✅ Encourage decisive action (no-op penalty)
+- ✅ Penalize unsafe decisions (unexpected refund)
+- ✅ Reward clean submission (submission bonus)
 
 ---
 
-## 📊 Grading Criteria
+## 📊 Grading Breakdown
 
-The deterministic grader evaluates:
+Deterministic grader with component-level scoring:
 
-| Component | Weight | Criteria |
-|-----------|--------|----------|
-| **Queue** | 15% | Correct department assignment |
-| **Priority** | 15% | Urgency match |
-| **Escalation** | 15% | Route to correct specialist team |
-| **Status** | 10% | Ticket state lifecycle |
-| **Refund** | 25% | Decision correctness + amount precision |
-| **Tags** | 10% | Coverage of relevant tags |
-| **Reply** | 10% | Required/forbidden keywords |
+| Component | Weight | Criteria | Score Range |
+|-----------|--------|----------|-------------|
+| **Queue** | 15% | Correct department assignment | 0.0–1.0 |
+| **Priority** | 15% | Urgency level matching | 0.0–1.0 |
+| **Escalation** | 15% | Route to correct team | 0.0–1.0 |
+| **Status** | 10% | Ticket state accuracy | 0.0–1.0 |
+| **Refund** | 25% | Decision + amount precision | 0.0–1.0 |
+| **Tags** | 10% | Required tag coverage | 0.0–1.0 |
+| **Reply** | 10% | Keyword requirements met | 0.0–1.0 |
+| **OVERALL** | 100% | Weighted total | 0.0–1.0 |
 
 ---
 
 ## 🔄 Advanced Features
 
-### Procedural Variants
+### Procedural Task Variants
 
-Infinite task variations for robust training:
+Infinite training variety without task memorization:
 
 ```python
-# Same task, different seeds → varied context, fixed outcomes
+# Same task, different seeds → varied customer messages
+# But expected outcomes remain fixed for reproducible grading
+
 for seed in range(100):
     obs = env.reset(task_id="medium_duplicate_charge", seed=seed)
-    # Customer message, account snapshot, urgency all vary
-    # But expected refund_decision & amount stay constant
+    # Different: customer_message, account_snapshot, urgency
+    # Same: expected refund_decision, expected refund_amount
+    
+    # Your agent experiences 100 different scenarios
+    # Each with deterministic, known correct answer
 ```
+
+**Use Cases:**
+- Training robust agents (avoid overfitting wording)
+- Generating evaluation datasets
+- Multi-environment training sweeps
+
+---
+
+### Difficulty-Scaled Step Budgets
+
+Fair time allocation based on task complexity:
+
+```
+Easy   → 4 steps   (quick decisions, time pressure)
+Medium → 6 steps   (balanced reasoning + action)
+Hard   → 8 steps   (complex security reasoning)
+```
+
+Automatically applied via `_get_difficulty_scaled_max_steps()`.
+
+---
 
 ### Multi-Agent Coordination
 
-Framework for distributed agent teams:
+Framework for distributed specialist teams:
 
 ```python
-from support_queue_env.multi_agent import MultiAgentCoordinator
+from support_queue_env.multi_agent import MultiAgentCoordinator, RoutingAgent
 
 coordinator = MultiAgentCoordinator({
-    "router": RoutingAgent(),        # Route to specialist
-    "billing": BillingSpecialist(),  # Handle refunds
-    "security": SecuritySpecialist() # Handle compromise
+    "router": RoutingAgent(),
+    "billing": BillingSpecialist(),
+    "security": SecuritySpecialist(),
 })
 
+# Agents debate and reach consensus
 action = coordinator.coordinate(obs, max_rounds=2)
+obs = env.step(action)
 ```
 
-### Difficulty-Scaled Budgets
-
-Fair time allocation per task complexity:
-
-```python
-# Easy: 4 steps  | Medium: 6 steps  | Hard: 8 steps
-#
-# Agents learn speed (easy) and reasoning (hard)
-```
+See `multi_agent.py` for full implementation.
 
 ---
 
@@ -219,18 +279,19 @@ Fair time allocation per task complexity:
 
 ```
 Scaler/
-├── server/
-│   ├── app.py                      # FastAPI server
-│   └── support_queue_environment.py # Environment impl
-├── models.py                        # Pydantic types
-├── graders.py                       # Deterministic scoring
-├── tasks.py                         # Task definitions
-├── baseline.py                      # OpenAI inference example
-├── multi_agent.py                   # Multi-agent framework
-├── tests/                           # Unit tests
-├── openenv.yaml                     # OpenEnv spec
-├── Dockerfile                       # Container for HF Spaces
-└── pyproject.toml                   # Dependencies
+├── 📂 server/
+│   ├── app.py                           # FastAPI server
+│   └── support_queue_environment.py       # Env implementation
+├── models.py                             # Pydantic types
+├── graders.py                            # Deterministic scoring
+├── tasks.py                              # Task definitions
+├── baseline.py                           # OpenAI inference
+├── multi_agent.py                        # Multi-agent framework
+├── 📂 tests/                             # Unit tests
+├── openenv.yaml                          # OpenEnv spec
+├── Dockerfile                            # Container setup
+├── pyproject.toml                        # Dependencies
+└── uv.lock                               # Locked versions
 ```
 
 ---
@@ -238,213 +299,130 @@ Scaler/
 ## 🧪 Testing
 
 ```bash
-# Run pytest suite
-pytest tests/
+# Run full test suite
+pytest tests/ -v
 
-# Check OpenEnv spec compliance
+# Run specific test
+pytest tests/test_support_queue_environment.py::test_reset -v
+
+# Check OpenEnv compliance
 python validation_check.py
 
-# Run baseline inference
-python baseline.py --task easy_password_reset --seed 0
+# Check step budgets
+python test_scaled_steps.py
 ```
 
 ---
 
 ## 🐳 Docker & Deployment
 
-### Local Docker Build
+### Local Development
 
 ```bash
 docker build -t scaler-env .
 docker run -p 8000:8000 scaler-env
-# API at http://localhost:8000/docs
+# API available at http://localhost:8000/docs
 ```
 
 ### Hugging Face Spaces
 
-Deploy directly to HF Spaces (pre-configured):
+Deploy to HF Spaces (pre-configured):
 
 ```bash
+# 1. Create space on huggingface.co/spaces
+# 2. Add as remote
 git remote add hf https://huggingface.co/spaces/YOUR_USERNAME/Scaler
-git push hf main
-```
 
-The `Dockerfile` and `openenv.yaml` are ready for HF deployment.
+# 3. Push to deploy
+git push hf main
+# HF auto-builds Docker image and hosts live
+```
 
 ---
 
-## 📖 Examples
+## 📖 Usage Examples
 
-### Example 1: Single Episode with GPT-4
+### Example 1: Single Episode with Claude
 
 ```python
-from openai import OpenAI
+import anthropic
 from support_queue_env.server.support_queue_environment import SupportQueueEnvironment
 from support_queue_env.models import SupportQueueAction
 
 env = SupportQueueEnvironment()
-client = OpenAI()
+client = anthropic.Anthropic()
 
 obs = env.reset(task_id="medium_duplicate_charge")
 
-for step in range(6):
-    # Use GPT-4 to generate action
-    response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[{
-            "role": "user",
-            "content": f"Support task: {obs.objective}\n\n{obs.customer_message}"
-        }]
-    )
-    
-    # (Parse response into SupportQueueAction)
-    obs = env.step(action)
-    
-    if obs.done:
-        break
+message = client.messages.create(
+    model="claude-3-5-sonnet-20241022",
+    max_tokens=500,
+    messages=[{"role": "user", "content": f"Task: {obs.objective}\n\n{obs.customer_message}"}]
+)
 
-print(f"Final Score: {obs.score_breakdown['overall']}")
+# Parse response...
+action = SupportQueueAction(queue="billing", submit=True)
+obs = env.step(action)
+print(f"Score: {obs.score_breakdown['overall']:.2f}")
 ```
 
-### Example 2: Procedural Task Sweep
+### Example 2: Benchmark Over Seeds
 
 ```python
-scores = {}
+results = {}
 for seed in range(10):
     obs = env.reset(task_id="hard_admin_compromise", seed=seed)
     # Agent acts...
-    scores[seed] = obs.score_breakdown['overall']
+    obs = env.step(action)
+    results[seed] = {
+        "reward": obs.cumulative_reward,
+        "score": obs.score_breakdown["overall"]
+    }
 
-print(f"Average: {sum(scores.values()) / len(scores):.2f}")
+avg_score = sum(r["score"] for r in results.values()) / len(results)
+print(f"Avg Score: {avg_score:.3f}")
 ```
 
 ---
 
-## 📄 Documentation
+## 📄 Documentation Files
 
-- [REQUIREMENTS_CHECKLIST.md](REQUIREMENTS_CHECKLIST.md) — Functional & non-functional requirements
-- [VALIDATION_REPORT.md](VALIDATION_REPORT.md) — OpenEnv spec compliance validation
-- [EVALUATION_REPORT.md](EVALUATION_REPORT.md) — Evaluation metrics & results
-- [PERFECT_SCORE_REPORT.md](PERFECT_SCORE_REPORT.md) — Baseline performance benchmarks
-
----
-
-## 🤝 Contributing
-
-Contributions welcome! Areas for extension:
-
-- Additional task types (refund escalations, multi-step cases)
-- New grading criteria (response time, customer satisfaction)
-- Agent baseline improvements (prompt optimization, few-shot examples)
-- Multi-turn dialogue support
+- **[REQUIREMENTS_CHECKLIST.md](REQUIREMENTS_CHECKLIST.md)** — Functional & non-functional requirements verification
+- **[VALIDATION_REPORT.md](VALIDATION_REPORT.md)** — OpenEnv spec compliance validation results
+- **[EVALUATION_REPORT.md](EVALUATION_REPORT.md)** — Agent evaluation metrics & benchmarks
+- **[PERFECT_SCORE_REPORT.md](PERFECT_SCORE_REPORT.md)** — Perfect-play trajectories
 
 ---
 
-## 📜 License
+## 🔗 Reference
 
-MIT License — See LICENSE file for details.
-
----
-
-## 🔗 References
-
-- [OpenEnv Specification](https://github.com/openenv/openenv)
-- [OpenAI Python Client](https://github.com/openai/openai-python)
-- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- **OpenEnv Spec:** https://github.com/openenv/openenv
+- **OpenAI Python:** https://github.com/openai/openai-python
+- **FastAPI:** https://fastapi.tiangolo.com/
 
 ---
 
 ## 📞 Support
 
-For questions or issues:
-- **GitHub Issues:** [github.com/BGokulKrishnaSai/Scaler/issues](https://github.com/BGokulKrishnaSai/Scaler/issues)
-- **API Docs:** http://localhost:8000/docs (after server startup)
+**Issues & Questions:**
+- 🐛 [GitHub Issues](https://github.com/BGokulKrishnaSai/Scaler/issues)
+- 📚 [API Docs](http://localhost:8000/docs) (after running server)
+
+**Live Server:**
+```bash
+python -m support_queue_env.server.app
+# Then visit: http://localhost:8000/docs
+```
 
 ---
 
-**Ready to train an agent?** Start with:
-uv run server --port 8000
-```
-
-Validate the environment:
+**Start training your agent now:**
 
 ```bash
-openenv validate .
-openenv validate --url http://localhost:8000
+git clone https://github.com/BGokulKrishnaSai/Scaler.git
+cd Scaler
+pip install -e .
+python -m support_queue_env.server.app
 ```
 
-## Usage
-
-Direct environment usage:
-
-```python
-from support_queue_env.models import SupportQueueAction
-from support_queue_env.server.support_queue_environment import SupportQueueEnvironment
-
-env = SupportQueueEnvironment()
-obs = env.reset(task_id="easy_password_reset")
-obs = env.step(
-    SupportQueueAction(
-        queue="account_access",
-        priority="normal",
-        status="pending_customer",
-        escalation_team="none",
-        refund_decision="none",
-        tags=["login", "password_reset", "mfa"],
-        reply_draft="Please complete identity verification first. Once that is done, we can issue a temporary sign-in link. If you still have a backup code, you can use it now.",
-        submit=True,
-    )
-)
-print(obs.reward, obs.done, obs.score_breakdown["overall"])
-```
-
-Remote client usage:
-
-```python
-from support_queue_env import SupportQueueAction, SupportQueueEnv
-
-with SupportQueueEnv(base_url="http://localhost:8000").sync() as env:
-    result = env.reset(task_id="medium_duplicate_charge")
-    result = env.step(SupportQueueAction(queue="billing"))
-    print(result.observation.feedback)
-```
-
-## Baseline Inference
-
-The baseline script reads `OPENAI_API_KEY` from the environment and writes its results to `outputs/evals/baseline_scores.json`.
-
-```bash
-$env:OPENAI_API_KEY="sk-..."
-python baseline.py --model gpt-4.1-mini-2025-04-14
-```
-
-Baseline score status in this workspace:
-
-- OpenAI-backed baseline scores have not been generated here because `OPENAI_API_KEY` was not available during validation.
-- The script is deterministic given a fixed model, `temperature=0`, and the seeded task set.
-- After running it once, copy the reported per-task and average scores into this section for submission.
-
-## Docker
-
-Build:
-
-```bash
-docker build -t support-queue-env:latest .
-```
-
-Run:
-
-```bash
-docker run --rm -p 8000:8000 support-queue-env:latest
-```
-
-## Hugging Face Spaces
-
-This repo is already shaped for a Docker Space and tagged with `openenv` in the README front matter.
-
-```bash
-openenv push
-```
-#   S c a l e r 
- 
- 
+🚀 **Your AI agent awaits!**
