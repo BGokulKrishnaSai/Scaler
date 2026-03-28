@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openenv-support-queue-env"
+version = "0.1.0"
+description = "Customer support triage environment for OpenEnv"
+requires-python = ">=3.10"
+dependencies = [
+    "openenv-core[core]>=0.2.2",
+    "openai>=2.29.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+]
+
+[project.scripts]
+server = "support_queue_env.server.app:main"
+
+[tool.setuptools]
+include-package-data = true
+packages = ["support_queue_env", "support_queue_env.server"]
+package-dir = { "support_queue_env" = ".", "support_queue_env.server" = "server" }

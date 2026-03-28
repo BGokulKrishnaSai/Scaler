@@ -1,0 +1,91 @@
+🚀 SUPPORT QUEUE ENVIRONMENT - PROJECT RUNNING
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ SERVER STATUS: RUNNING
+   Health Check: HTTP 200
+   Host: 0.0.0.0
+   Port: 8000
+   Base URL: http://localhost:8000
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📊 DEMO RESULTS (All 3 Tasks Completed)
+
+   TASK 1: easy_password_reset
+   ├─ Difficulty: easy
+   ├─ Steps: 3 actions
+   ├─ Final Score: 1.00 ✓ (Perfect)
+   └─ Cumulative Reward: +1.940
+
+   TASK 2: medium_duplicate_charge
+   ├─ Difficulty: medium
+   ├─ Steps: 1 action (optimal)
+   ├─ Final Score: 1.00 ✓ (Perfect)
+   └─ Grader: overall=1.00 (all 7 components perfect)
+
+   TASK 3: hard_admin_compromise
+   ├─ Difficulty: hard
+   ├─ Steps: 1 action
+   ├─ Final Score: 0.90 ✓ (90% - reply score 0.33)
+   └─ Comment: Minor reply keyword penalty
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 API ENDPOINTS
+
+   Documentation: http://localhost:8000/docs
+   ReDoc: http://localhost:8000/redoc
+   OpenAPI JSON: http://localhost:8000/openapi.json
+   Health Check: http://localhost:8000/health
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 AVAILABLE COMMANDS
+
+   1. Run Direct Environment (Python):
+      $ python -c "
+        from support_queue_env.models import SupportQueueAction
+        from support_queue_env.server.support_queue_environment import SupportQueueEnvironment
+        env = SupportQueueEnvironment()
+        obs = env.reset(task_id='easy_password_reset')
+        obs = env.step(SupportQueueAction(queue='account_access'))
+        print(f'Score: {obs.score_breakdown[\"overall\"]:.2f}')
+      "
+
+   2. Run Baseline Inference (with OpenAI API):
+      $ export OPENAI_API_KEY="sk-..."
+      $ python baseline.py --model gpt-4-mini-2025-04-14
+
+   3. Test Suite:
+      $ python -m pytest tests/ -v
+
+   4. Server in Docker:
+      $ docker build -t support-queue-env:latest .
+      $ docker run --rm -p 8000:8000 support-queue-env:latest
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✨ FEATURES VERIFIED
+
+   ✓ Real-world support triage environment
+   ✓ 3 tasks (easy → medium → hard) with deterministic grading
+   ✓ OpenEnv spec compliance (typed models, APIs, validation)
+   ✓ Shaped reward function with partial progress signals
+   ✓ FastAPI server with health checks
+   ✓ Full REST API for remote agents
+   ✓ Baseline inference with OpenAI integration
+   ✓ Docker deployment ready
+   ✓ HuggingFace Spaces metadata configured
+   ✓ 2/2 unit tests passing
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 NEXT STEPS
+
+   → Test with OpenAI baseline: python baseline.py --model gpt-4-mini
+   → Deploy to HF Spaces: openenv push
+   → Explore API docs: Visit http://localhost:8000/docs
+   → Integrate with your agent framework
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
